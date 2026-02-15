@@ -144,13 +144,17 @@
             font-weight: 700;
             font-size: 1.8rem;
         }
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
         .btn-group button {
             background: white;
             border: 2px solid #10687c;
             color: #10687c;
             font-weight: 600;
             padding: 10px 20px;
-            margin-left: 10px;
             border-radius: 40px;
             cursor: pointer;
             font-size: 0.95rem;
@@ -169,6 +173,14 @@
         }
         .btn-group .primary-btn:hover {
             background: #0b4f60;
+        }
+        .logout-btn {
+            background: #a03d3d !important;
+            border-color: #8b2e2e !important;
+            color: white !important;
+        }
+        .logout-btn:hover {
+            background: #7f2f2f !important;
         }
         .upload-area {
             background: white;
@@ -317,7 +329,7 @@
     </style>
 </head>
 <body>
-    <!-- LOGIN PAGE (FIXED) -->
+    <!-- LOGIN PAGE -->
     <div id="loginPage">
         <div class="login-card">
             <h2>UACE</h2>
@@ -348,6 +360,7 @@
                 <button onclick="window.print()">🖨️ Print</button>
                 <button onclick="downloadExcel()">📥 Excel</button>
                 <button onclick="downloadPDF()">📄 PDF</button>
+                <button class="logout-btn" onclick="logout()">🚪 Logout</button>
             </div>
         </div>
 
@@ -377,12 +390,11 @@
         (function() {
             // ---------- CONFIG ----------
             const gradePoints = { 'A':6, 'B':5, 'C':4, 'D':3, 'E':2, 'O':1, 'F':0 };
-            // numeric to letter mapping (based on paper grade descriptions)
             const numToLetter = { 1:'A',2:'A',3:'B',4:'B',5:'C',6:'C',7:'D',8:'D',9:'F' };
 
             // global data stores
             let gradeSummary = null;
-            let candidatePoints = [];          // { index, name, sex, points, subjects: [ {code, gradeLetter} ] }
+            let candidatePoints = [];
             let subjectStats = null;
             let bestFifteen = [];
 
@@ -392,12 +404,14 @@
             const loginError = document.getElementById('loginError');
             const usernameInput = document.getElementById('username');
             const passwordInput = document.getElementById('password');
+            const fileInput = document.getElementById('excelFile');
+            const reportArea = document.getElementById('reportArea');
+            const chartRow = document.getElementById('chartRow');
 
-            // ---------- LOGIN FUNCTION (FIXED) ----------
+            // ---------- LOGIN ----------
             window.login = function() {
                 const user = usernameInput.value.trim();
                 const pwd = passwordInput.value.trim();
-                // Simple hardcoded check (you can change credentials here)
                 if (user === 'admin' && pwd === '1234') {
                     loginPage.style.display = 'none';
                     mainPage.style.display = 'block';
@@ -407,14 +421,31 @@
                 }
             };
 
-            // Allow Enter key to login
+            // Enter key login
             document.addEventListener('keypress', function(e) {
                 if (e.key === 'Enter' && loginPage.style.display !== 'none') {
                     window.login();
                 }
             });
 
-            // ---------- PARSING LOGIC ----------
+            // ---------- LOGOUT (NEW) ----------
+            window.logout = function() {
+                // Clear any existing data
+                reportArea.innerHTML = '';
+                chartRow.style.display = 'none';
+                // Reset file input
+                fileInput.value = '';
+                // Hide main, show login
+                mainPage.style.display = 'none';
+                loginPage.style.display = 'flex';
+                // Optionally clear any charts
+                const gradeCanvas = document.getElementById('gradeChart');
+                const subjectCanvas = document.getElementById('subjectChart');
+                Chart.getChart(gradeCanvas)?.destroy();
+                Chart.getChart(subjectCanvas)?.destroy();
+            };
+
+            // ---------- PARSING ----------
             function parseOverallGrade(gradeToken) {
                 if (!gradeToken) return 'F';
                 const trimmed = gradeToken.trim();
@@ -443,7 +474,6 @@
 
             // ---------- MAIN ANALYSIS ----------
             window.analyze = function() {
-                const fileInput = document.getElementById('excelFile');
                 if (!fileInput.files || fileInput.files.length === 0) {
                     alert('Please select an Excel file first.');
                     return;
@@ -451,70 +481,78 @@
                 const file = fileInput.files[0];
                 const reader = new FileReader();
                 reader.onload = function(e) {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const sheetName = workbook.SheetNames[0];
-                    const sheet = workbook.Sheets[sheetName];
-                    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const sheetName = workbook.SheetNames[0];
+                        const sheet = workbook.Sheets[sheetName];
+                        const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
-                    // reset accumulators
-                    gradeSummary = { A:0, B:0, C:0, D:0, E:0, O:0, F:0 };
-                    subjectStats = {};
-                    candidatePoints = [];
+                        // reset accumulators
+                        gradeSummary = { A:0, B:0, C:0, D:0, E:0, O:0, F:0 };
+                        subjectStats = {};
+                        candidatePoints = [];
 
-                    rows.forEach(row => {
-                        const indexNo = row['IndexNo'] || row['Index No.'] || '';
-                        const name = row['Candidate_Name'] || row['Candidate Name'] || '';
-                        const sexRaw = row['Sex'] || '';
-                        const sex = sexRaw.toString().trim().charAt(0).toUpperCase() === 'M' ? 'M' : 'F';
-                        const subjectsStr = row['Subjects'] || row['subject'] || '';
+                        rows.forEach(row => {
+                            const indexNo = row['IndexNo'] || row['Index No.'] || '';
+                            const name = row['Candidate_Name'] || row['Candidate Name'] || '';
+                            const sexRaw = row['Sex'] || '';
+                            const sex = sexRaw.toString().trim().charAt(0).toUpperCase() === 'M' ? 'M' : 'F';
+                            const subjectsStr = row['Subjects'] || row['subject'] || '';
 
-                        const tokens = subjectsStr.toString().split(/\s+/);
-                        let totalPoints = 0;
-                        const subjectDetails = [];
+                            const tokens = subjectsStr.toString().split(/\s+/);
+                            let totalPoints = 0;
+                            const subjectDetails = [];
 
-                        tokens.forEach(token => {
-                            if (!token.includes('-') || !token.includes('[')) return;
-                            const parsed = parseSubjectEntry(token);
-                            if (!parsed) return;
-                            const { subjectCode, gradeLetter } = parsed;
-                            if (gradeSummary.hasOwnProperty(gradeLetter)) {
-                                gradeSummary[gradeLetter] += 1;
-                            } else {
-                                gradeSummary['F'] += 1;
-                            }
-                            const points = gradePoints[gradeLetter] || 0;
-                            totalPoints += points;
-                            subjectDetails.push({ code: subjectCode, grade: gradeLetter });
+                            tokens.forEach(token => {
+                                if (!token.includes('-') || !token.includes('[')) return;
+                                const parsed = parseSubjectEntry(token);
+                                if (!parsed) return;
+                                const { subjectCode, gradeLetter } = parsed;
+                                if (gradeSummary.hasOwnProperty(gradeLetter)) {
+                                    gradeSummary[gradeLetter] += 1;
+                                } else {
+                                    gradeSummary['F'] += 1;
+                                }
+                                const points = gradePoints[gradeLetter] || 0;
+                                totalPoints += points;
+                                subjectDetails.push({ code: subjectCode, grade: gradeLetter });
 
-                            if (!subjectStats[subjectCode]) {
-                                subjectStats[subjectCode] = { totalPoints: 0, count: 0 };
-                            }
-                            subjectStats[subjectCode].totalPoints += points;
-                            subjectStats[subjectCode].count += 1;
+                                if (!subjectStats[subjectCode]) {
+                                    subjectStats[subjectCode] = { totalPoints: 0, count: 0 };
+                                }
+                                subjectStats[subjectCode].totalPoints += points;
+                                subjectStats[subjectCode].count += 1;
+                            });
+
+                            candidatePoints.push({
+                                index: indexNo,
+                                name: name,
+                                sex: sex,
+                                points: totalPoints,
+                                subjects: subjectDetails
+                            });
                         });
 
-                        candidatePoints.push({
-                            index: indexNo,
-                            name: name,
-                            sex: sex,
-                            points: totalPoints,
-                            subjects: subjectDetails
-                        });
-                    });
+                        if (candidatePoints.length === 0) {
+                            alert('No valid candidate data found. Check file format.');
+                            return;
+                        }
 
-                    // sort by points desc
-                    candidatePoints.sort((a,b) => b.points - a.points);
-                    bestFifteen = candidatePoints.slice(0, 15);
+                        candidatePoints.sort((a,b) => b.points - a.points);
+                        bestFifteen = candidatePoints.slice(0, 15);
 
-                    renderReport();
-                    drawCharts();
-                    document.getElementById('chartRow').style.display = 'flex';
+                        renderReport();
+                        drawCharts();
+                        chartRow.style.display = 'flex';
+                    } catch (err) {
+                        alert('Error processing file: ' + err.message);
+                    }
                 };
                 reader.readAsArrayBuffer(file);
             };
 
-            // ---------- RENDER DASHBOARD & TABLES ----------
+            // ---------- RENDER ----------
             function renderReport() {
                 const totalCandidates = candidatePoints.length;
                 const totalF = gradeSummary.F || 0;
@@ -524,7 +562,6 @@
                 const bestMale = candidatePoints.find(c => c.sex === 'M') || null;
                 const bestFemale = candidatePoints.find(c => c.sex === 'F') || null;
 
-                // FIXED: missing closing brace in grade row was here — now corrected
                 let html = `
                     <div class="info-cards">
                         <div class="card"><h3>📋 Candidates Sat</h3><div class="big-number">${totalCandidates}</div></div>
@@ -571,7 +608,7 @@
                 });
                 html += `</tbody></table>`;
 
-                document.getElementById('reportArea').innerHTML = html;
+                reportArea.innerHTML = html;
             }
 
             // charts
