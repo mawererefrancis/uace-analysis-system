@@ -317,18 +317,18 @@
     </style>
 </head>
 <body>
-    <!-- LOGIN PAGE -->
+    <!-- LOGIN PAGE (FIXED) -->
     <div id="loginPage">
         <div class="login-card">
             <h2>UACE</h2>
             <div class="sub">Advanced Analysis System</div>
             <div class="input-group">
                 <label>Username</label>
-                <input type="text" id="username" placeholder="admin" value="admin">
+                <input type="text" id="username" placeholder="Enter username" value="admin">
             </div>
             <div class="input-group">
                 <label>Password</label>
-                <input type="password" id="password" placeholder="••••" value="1234">
+                <input type="password" id="password" placeholder="Enter password" value="1234">
             </div>
             <button class="login-btn" onclick="login()">LOGIN & ACCESS</button>
             <p id="loginError"></p>
@@ -374,296 +374,299 @@
     </div>
 
     <script>
-        // ---------- CONFIG ----------
-        const gradePoints = { 'A':6, 'B':5, 'C':4, 'D':3, 'E':2, 'O':1, 'F':0 };
-        // numeric to letter mapping (based on paper grade descriptions)
-        const numToLetter = { 1:'A',2:'A',3:'B',4:'B',5:'C',6:'C',7:'D',8:'D',9:'F' };
+        (function() {
+            // ---------- CONFIG ----------
+            const gradePoints = { 'A':6, 'B':5, 'C':4, 'D':3, 'E':2, 'O':1, 'F':0 };
+            // numeric to letter mapping (based on paper grade descriptions)
+            const numToLetter = { 1:'A',2:'A',3:'B',4:'B',5:'C',6:'C',7:'D',8:'D',9:'F' };
 
-        // global data stores
-        let gradeSummary = null;
-        let candidatePoints = [];          // { index, name, sex, points, subjects: [ {code, gradeLetter} ] }
-        let subjectStats = null;            // not heavily used but keep
-        let bestFifteen = [];
+            // global data stores
+            let gradeSummary = null;
+            let candidatePoints = [];          // { index, name, sex, points, subjects: [ {code, gradeLetter} ] }
+            let subjectStats = null;
+            let bestFifteen = [];
 
-        // DOM elements
-        const loginPage = document.getElementById('loginPage');
-        const mainPage = document.getElementById('mainPage');
-        const loginError = document.getElementById('loginError');
+            // DOM elements
+            const loginPage = document.getElementById('loginPage');
+            const mainPage = document.getElementById('mainPage');
+            const loginError = document.getElementById('loginError');
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
 
-        function login() {
-            const user = document.getElementById('username').value;
-            const pwd = document.getElementById('password').value;
-            if (user === 'admin' && pwd === '1234') {
-                loginPage.style.display = 'none';
-                mainPage.style.display = 'block';
-            } else {
-                loginError.innerText = '❌ Invalid credentials (use admin/1234)';
-            }
-        }
-
-        // ---------- PARSING LOGIC ----------
-        function parseOverallGrade(gradeToken) {
-            // gradeToken is something like '5' or 'O' or 'E' or 'F'
-            if (!gradeToken) return 'F';
-            const trimmed = gradeToken.trim();
-            if (trimmed.length === 0) return 'F';
-            const firstChar = trimmed.charAt(0);
-            if (/[A-Za-z]/.test(firstChar)) {
-                // letter grade
-                return firstChar.toUpperCase();
-            } else if (/[0-9]/.test(firstChar)) {
-                // numeric grade
-                const num = parseInt(trimmed, 10);
-                if (num >= 1 && num <= 9) return numToLetter[num];
-                else return 'F';
-            }
-            return 'F';
-        }
-
-        // Extract subject code and overall grade from something like "GEP-5 [1-5]" or "ENT-O [1-9,2-8,3-5]"
-        function parseSubjectEntry(entry) {
-            const match = entry.match(/^([A-Za-z]+)-([A-Z0-9]+)\s*\[.*\]$/);
-            if (match) {
-                const subjectCode = match[1];
-                const overallToken = match[2];
-                const gradeLetter = parseOverallGrade(overallToken);
-                return { subjectCode, gradeLetter };
-            }
-            return null;
-        }
-
-        // ---------- MAIN ANALYSIS ----------
-        function analyze() {
-            const fileInput = document.getElementById('excelFile');
-            if (!fileInput.files || fileInput.files.length === 0) {
-                alert('Please select an Excel file first.');
-                return;
-            }
-            const file = fileInput.files[0];
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const sheetName = workbook.SheetNames[0];
-                const sheet = workbook.Sheets[sheetName];
-                const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-
-                // reset accumulators
-                gradeSummary = { A:0, B:0, C:0, D:0, E:0, O:0, F:0 };
-                subjectStats = {};
-                candidatePoints = [];
-
-                rows.forEach(row => {
-                    const indexNo = row['IndexNo'] || row['Index No.'] || '';
-                    const name = row['Candidate_Name'] || row['Candidate Name'] || '';
-                    const sexRaw = row['Sex'] || '';
-                    const sex = sexRaw.toString().trim().charAt(0).toUpperCase() === 'M' ? 'M' : 'F';
-                    const subjectsStr = row['Subjects'] || row['subject'] || '';
-
-                    // Split subjects by spaces, but be careful: subjects like "GEP-5 [1-5]" are one chunk.
-                    const tokens = subjectsStr.toString().split(/\s+/);
-                    let totalPoints = 0;
-                    const subjectDetails = [];
-
-                    tokens.forEach(token => {
-                        if (!token.includes('-') || !token.includes('[')) return;
-                        const parsed = parseSubjectEntry(token);
-                        if (!parsed) return;
-                        const { subjectCode, gradeLetter } = parsed;
-                        // count grade in summary
-                        if (gradeSummary.hasOwnProperty(gradeLetter)) {
-                            gradeSummary[gradeLetter] += 1;
-                        } else {
-                            gradeSummary['F'] += 1; // fallback
-                        }
-                        const points = gradePoints[gradeLetter] || 0;
-                        totalPoints += points;
-                        subjectDetails.push({ code: subjectCode, grade: gradeLetter });
-
-                        // subject stats (optional)
-                        if (!subjectStats[subjectCode]) {
-                            subjectStats[subjectCode] = { totalPoints: 0, count: 0 };
-                        }
-                        subjectStats[subjectCode].totalPoints += points;
-                        subjectStats[subjectCode].count += 1;
-                    });
-
-                    candidatePoints.push({
-                        index: indexNo,
-                        name: name,
-                        sex: sex,
-                        points: totalPoints,
-                        subjects: subjectDetails
-                    });
-                });
-
-                // sort by points desc
-                candidatePoints.sort((a,b) => b.points - a.points);
-                bestFifteen = candidatePoints.slice(0, 15);
-
-                renderReport();
-                drawCharts();
-                document.getElementById('chartRow').style.display = 'flex';
+            // ---------- LOGIN FUNCTION (FIXED) ----------
+            window.login = function() {
+                const user = usernameInput.value.trim();
+                const pwd = passwordInput.value.trim();
+                // Simple hardcoded check (you can change credentials here)
+                if (user === 'admin' && pwd === '1234') {
+                    loginPage.style.display = 'none';
+                    mainPage.style.display = 'block';
+                    loginError.innerText = '';
+                } else {
+                    loginError.innerText = '❌ Invalid credentials. Use admin / 1234';
+                }
             };
-            reader.readAsArrayBuffer(file);
-        }
 
-        // ---------- RENDER DASHBOARD & TABLES ----------
-        function renderReport() {
-            const totalCandidates = candidatePoints.length;
-            const totalF = gradeSummary.F || 0;
-            const passed = totalCandidates - totalF;
-            const passPercent = totalCandidates ? ((passed / totalCandidates) * 100).toFixed(1) : 0;
-
-            // best male / female (optional)
-            const bestMale = candidatePoints.find(c => c.sex === 'M') || null;
-            const bestFemale = candidatePoints.find(c => c.sex === 'F') || null;
-
-            let html = `
-                <div class="info-cards">
-                    <div class="card"><h3>📋 Candidates Sat</h3><div class="big-number">${totalCandidates}</div></div>
-                    <div class="card"><h3>✅ Pass Percentage</h3><div class="big-number">${passPercent}%</div></div>
-                    <div class="card"><h3>🏆 Top Points</h3><div class="big-number">${candidatePoints[0]?.points || 0}</div></div>
-                </div>
-
-                <div class="grade-summary-table">
-                    <h3 style="margin-bottom:20px;">📊 GRADE DISTRIBUTION (All Subjects)</h3>
-                    <table>
-                        <tr><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>O</th><th>F</th></tr>
-                        <tr>
-                            <td>${gradeSummary.A}</td><td>${gradeSummary.B}</td><td>${gradeSummary.C</td><td>${gradeSummary.D}</td><td>${gradeSummary.E}</td><td>${gradeSummary.O}</td><td>${gradeSummary.F}</td>
-                        </tr>
-                    </table>
-                </div>
-
-                <div style="display:flex; gap:40px; flex-wrap:wrap; margin:20px 0;">
-                    ${bestMale ? `<div class="card"><h3>👤 Best Male</h3>${bestMale.name}<br>Index: ${bestMale.index}<br><span class="badge">${bestMale.points} pts</span></div>` : ''}
-                    ${bestFemale ? `<div class="card"><h3>👩 Best Female</h3>${bestFemale.name}<br>Index: ${bestFemale.index}<br><span class="badge">${bestFemale.points} pts</span></div>` : ''}
-                </div>
-
-                <h2 class="section-title">🏅 BEST 15 CANDIDATES (with subject grades)</h2>
-                <table class="best-table">
-                    <thead><tr><th>Rank</th><th>Index No</th><th>Name</th><th>Sex</th><th>Total Points</th><th>Subject Grades</th></tr></thead>
-                    <tbody>
-            `;
-            bestFifteen.forEach((c, i) => {
-                const gradeStr = c.subjects.map(s => `${s.code}-${s.grade}`).join(', ');
-                html += `<tr><td>${i+1}</td><td>${c.index}</td><td>${c.name}</td><td>${c.sex}</td><td><strong>${c.points}</strong></td><td style="font-size:0.9rem;">${gradeStr}</td></tr>`;
-            });
-            html += `</tbody></table>`;
-
-            // Full learner points list
-            html += `<h2 class="section-title">📋 LEARNER POINTS LIST (All Candidates)</h2>`;
-            html += `<table class="points-table"><thead><tr><th>Index No</th><th>Name</th><th>Sex</th><th>Total Points</th></tr></thead><tbody>`;
-            candidatePoints.forEach(c => {
-                html += `<tr><td>${c.index}</td><td>${c.name}</td><td>${c.sex}</td><td>${c.points}</td></tr>`;
-            });
-            html += `</tbody></table>`;
-
-            document.getElementById('reportArea').innerHTML = html;
-        }
-
-        // charts
-        function drawCharts() {
-            if (!gradeSummary) return;
-            const ctx1 = document.getElementById('gradeChart').getContext('2d');
-            const ctx2 = document.getElementById('subjectChart').getContext('2d');
-            // clear old charts
-            Chart.getChart('gradeChart')?.destroy();
-            Chart.getChart('subjectChart')?.destroy();
-
-            new Chart(ctx1, {
-                type: 'bar',
-                data: {
-                    labels: ['A','B','C','D','E','O','F'],
-                    datasets: [{
-                        label: 'Grade frequency',
-                        data: [gradeSummary.A, gradeSummary.B, gradeSummary.C, gradeSummary.D, gradeSummary.E, gradeSummary.O, gradeSummary.F],
-                        backgroundColor: '#1b7f99'
-                    }]
+            // Allow Enter key to login
+            document.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && loginPage.style.display !== 'none') {
+                    window.login();
                 }
             });
 
-            if (subjectStats && Object.keys(subjectStats).length) {
-                const labels = [], avgs = [];
-                for (let sub in subjectStats) {
-                    labels.push(sub);
-                    const avg = subjectStats[sub].totalPoints / subjectStats[sub].count;
-                    avgs.push(avg.toFixed(2));
+            // ---------- PARSING LOGIC ----------
+            function parseOverallGrade(gradeToken) {
+                if (!gradeToken) return 'F';
+                const trimmed = gradeToken.trim();
+                if (trimmed.length === 0) return 'F';
+                const firstChar = trimmed.charAt(0);
+                if (/[A-Za-z]/.test(firstChar)) {
+                    return firstChar.toUpperCase();
+                } else if (/[0-9]/.test(firstChar)) {
+                    const num = parseInt(trimmed, 10);
+                    if (num >= 1 && num <= 9) return numToLetter[num];
+                    else return 'F';
                 }
-                new Chart(ctx2, {
+                return 'F';
+            }
+
+            function parseSubjectEntry(entry) {
+                const match = entry.match(/^([A-Za-z]+)-([A-Z0-9]+)\s*\[.*\]$/);
+                if (match) {
+                    const subjectCode = match[1];
+                    const overallToken = match[2];
+                    const gradeLetter = parseOverallGrade(overallToken);
+                    return { subjectCode, gradeLetter };
+                }
+                return null;
+            }
+
+            // ---------- MAIN ANALYSIS ----------
+            window.analyze = function() {
+                const fileInput = document.getElementById('excelFile');
+                if (!fileInput.files || fileInput.files.length === 0) {
+                    alert('Please select an Excel file first.');
+                    return;
+                }
+                const file = fileInput.files[0];
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const sheet = workbook.Sheets[sheetName];
+                    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+                    // reset accumulators
+                    gradeSummary = { A:0, B:0, C:0, D:0, E:0, O:0, F:0 };
+                    subjectStats = {};
+                    candidatePoints = [];
+
+                    rows.forEach(row => {
+                        const indexNo = row['IndexNo'] || row['Index No.'] || '';
+                        const name = row['Candidate_Name'] || row['Candidate Name'] || '';
+                        const sexRaw = row['Sex'] || '';
+                        const sex = sexRaw.toString().trim().charAt(0).toUpperCase() === 'M' ? 'M' : 'F';
+                        const subjectsStr = row['Subjects'] || row['subject'] || '';
+
+                        const tokens = subjectsStr.toString().split(/\s+/);
+                        let totalPoints = 0;
+                        const subjectDetails = [];
+
+                        tokens.forEach(token => {
+                            if (!token.includes('-') || !token.includes('[')) return;
+                            const parsed = parseSubjectEntry(token);
+                            if (!parsed) return;
+                            const { subjectCode, gradeLetter } = parsed;
+                            if (gradeSummary.hasOwnProperty(gradeLetter)) {
+                                gradeSummary[gradeLetter] += 1;
+                            } else {
+                                gradeSummary['F'] += 1;
+                            }
+                            const points = gradePoints[gradeLetter] || 0;
+                            totalPoints += points;
+                            subjectDetails.push({ code: subjectCode, grade: gradeLetter });
+
+                            if (!subjectStats[subjectCode]) {
+                                subjectStats[subjectCode] = { totalPoints: 0, count: 0 };
+                            }
+                            subjectStats[subjectCode].totalPoints += points;
+                            subjectStats[subjectCode].count += 1;
+                        });
+
+                        candidatePoints.push({
+                            index: indexNo,
+                            name: name,
+                            sex: sex,
+                            points: totalPoints,
+                            subjects: subjectDetails
+                        });
+                    });
+
+                    // sort by points desc
+                    candidatePoints.sort((a,b) => b.points - a.points);
+                    bestFifteen = candidatePoints.slice(0, 15);
+
+                    renderReport();
+                    drawCharts();
+                    document.getElementById('chartRow').style.display = 'flex';
+                };
+                reader.readAsArrayBuffer(file);
+            };
+
+            // ---------- RENDER DASHBOARD & TABLES ----------
+            function renderReport() {
+                const totalCandidates = candidatePoints.length;
+                const totalF = gradeSummary.F || 0;
+                const passed = totalCandidates - totalF;
+                const passPercent = totalCandidates ? ((passed / totalCandidates) * 100).toFixed(1) : 0;
+
+                const bestMale = candidatePoints.find(c => c.sex === 'M') || null;
+                const bestFemale = candidatePoints.find(c => c.sex === 'F') || null;
+
+                // FIXED: missing closing brace in grade row was here — now corrected
+                let html = `
+                    <div class="info-cards">
+                        <div class="card"><h3>📋 Candidates Sat</h3><div class="big-number">${totalCandidates}</div></div>
+                        <div class="card"><h3>✅ Pass Percentage</h3><div class="big-number">${passPercent}%</div></div>
+                        <div class="card"><h3>🏆 Top Points</h3><div class="big-number">${candidatePoints[0]?.points || 0}</div></div>
+                    </div>
+
+                    <div class="grade-summary-table">
+                        <h3 style="margin-bottom:20px;">📊 GRADE DISTRIBUTION (All Subjects)</h3>
+                        <table>
+                            <tr><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>O</th><th>F</th></tr>
+                            <tr>
+                                <td>${gradeSummary.A}</td>
+                                <td>${gradeSummary.B}</td>
+                                <td>${gradeSummary.C}</td>
+                                <td>${gradeSummary.D}</td>
+                                <td>${gradeSummary.E}</td>
+                                <td>${gradeSummary.O}</td>
+                                <td>${gradeSummary.F}</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div style="display:flex; gap:40px; flex-wrap:wrap; margin:20px 0;">
+                        ${bestMale ? `<div class="card"><h3>👤 Best Male</h3>${bestMale.name}<br>Index: ${bestMale.index}<br><span class="badge">${bestMale.points} pts</span></div>` : ''}
+                        ${bestFemale ? `<div class="card"><h3>👩 Best Female</h3>${bestFemale.name}<br>Index: ${bestFemale.index}<br><span class="badge">${bestFemale.points} pts</span></div>` : ''}
+                    </div>
+
+                    <h2 class="section-title">🏅 BEST 15 CANDIDATES (with subject grades)</h2>
+                    <table class="best-table">
+                        <thead><tr><th>Rank</th><th>Index No</th><th>Name</th><th>Sex</th><th>Total Points</th><th>Subject Grades</th></tr></thead>
+                        <tbody>
+                `;
+                bestFifteen.forEach((c, i) => {
+                    const gradeStr = c.subjects.map(s => `${s.code}-${s.grade}`).join(', ');
+                    html += `<tr><td>${i+1}</td><td>${c.index}</td><td>${c.name}</td><td>${c.sex}</td><td><strong>${c.points}</strong></td><td style="font-size:0.9rem;">${gradeStr}</td></tr>`;
+                });
+                html += `</tbody></table>`;
+
+                html += `<h2 class="section-title">📋 LEARNER POINTS LIST (All Candidates)</h2>`;
+                html += `<table class="points-table"><thead><tr><th>Index No</th><th>Name</th><th>Sex</th><th>Total Points</th></tr></thead><tbody>`;
+                candidatePoints.forEach(c => {
+                    html += `<tr><td>${c.index}</td><td>${c.name}</td><td>${c.sex}</td><td>${c.points}</td></tr>`;
+                });
+                html += `</tbody></table>`;
+
+                document.getElementById('reportArea').innerHTML = html;
+            }
+
+            // charts
+            function drawCharts() {
+                if (!gradeSummary) return;
+                const ctx1 = document.getElementById('gradeChart').getContext('2d');
+                const ctx2 = document.getElementById('subjectChart').getContext('2d');
+                Chart.getChart('gradeChart')?.destroy();
+                Chart.getChart('subjectChart')?.destroy();
+
+                new Chart(ctx1, {
                     type: 'bar',
                     data: {
-                        labels: labels,
+                        labels: ['A','B','C','D','E','O','F'],
                         datasets: [{
-                            label: 'Avg points per subject',
-                            data: avgs,
-                            backgroundColor: '#0f8c7a'
+                            label: 'Grade frequency',
+                            data: [gradeSummary.A, gradeSummary.B, gradeSummary.C, gradeSummary.D, gradeSummary.E, gradeSummary.O, gradeSummary.F],
+                            backgroundColor: '#1b7f99'
                         }]
                     }
                 });
+
+                if (subjectStats && Object.keys(subjectStats).length) {
+                    const labels = [], avgs = [];
+                    for (let sub in subjectStats) {
+                        labels.push(sub);
+                        const avg = subjectStats[sub].totalPoints / subjectStats[sub].count;
+                        avgs.push(avg.toFixed(2));
+                    }
+                    new Chart(ctx2, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Avg points per subject',
+                                data: avgs,
+                                backgroundColor: '#0f8c7a'
+                            }]
+                        }
+                    });
+                }
             }
-        }
 
-        // EXPORT EXCEL (includes all candidate data with points & grades)
-        function downloadExcel() {
-            if (!candidatePoints.length) return alert('Nothing to export. Run analysis first.');
-            const exportRows = candidatePoints.map(c => ({
-                'IndexNo': c.index,
-                'Name': c.name,
-                'Sex': c.sex,
-                'Total Points': c.points,
-                'Subject Grades': c.subjects.map(s => `${s.code}-${s.grade}`).join('; ')
-            }));
-            const ws = XLSX.utils.json_to_sheet(exportRows);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, 'UACE Points');
-            XLSX.writeFile(wb, 'UACE_Advanced_Report.xlsx');
-        }
+            // EXPORT EXCEL
+            window.downloadExcel = function() {
+                if (!candidatePoints.length) return alert('Nothing to export. Run analysis first.');
+                const exportRows = candidatePoints.map(c => ({
+                    'IndexNo': c.index,
+                    'Name': c.name,
+                    'Sex': c.sex,
+                    'Total Points': c.points,
+                    'Subject Grades': c.subjects.map(s => `${s.code}-${s.grade}`).join('; ')
+                }));
+                const ws = XLSX.utils.json_to_sheet(exportRows);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'UACE Points');
+                XLSX.writeFile(wb, 'UACE_Advanced_Report.xlsx');
+            };
 
-        // PDF EXPORT (landscape A4, using html2canvas + jsPDF)
-        async function downloadPDF() {
-            if (!candidatePoints.length) return alert('No data to export.');
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('landscape', 'mm', 'a4');
-            const reportElement = document.getElementById('reportArea');
-            // clone to avoid canvas etc
-            const clone = reportElement.cloneNode(true);
-            clone.style.background = 'white';
-            clone.style.padding = '15px';
-            const container = document.createElement('div');
-            container.appendChild(clone);
-            document.body.appendChild(container);
-            try {
-                const canvas = await html2canvas(container, { scale: 1.5, logging: false, backgroundColor: '#ffffff' });
-                const imgData = canvas.toDataURL('image/png');
-                const imgWidth = 280; // A4 landscape ~297mm, we use 280 for margins
-                const pageHeight = 210;
-                const imgHeight = (canvas.height * imgWidth) / canvas.width;
-                let heightLeft = imgHeight;
-                let position = 10;
+            // PDF EXPORT
+            window.downloadPDF = async function() {
+                if (!candidatePoints.length) return alert('No data to export.');
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF('landscape', 'mm', 'a4');
+                const reportElement = document.getElementById('reportArea');
+                const clone = reportElement.cloneNode(true);
+                clone.style.background = 'white';
+                clone.style.padding = '15px';
+                const container = document.createElement('div');
+                container.appendChild(clone);
+                document.body.appendChild(container);
+                try {
+                    const canvas = await html2canvas(container, { scale: 1.5, logging: false, backgroundColor: '#ffffff' });
+                    const imgData = canvas.toDataURL('image/png');
+                    const imgWidth = 280;
+                    const pageHeight = 210;
+                    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                    let heightLeft = imgHeight;
+                    let position = 10;
 
-                doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-                heightLeft -= pageHeight;
-
-                while (heightLeft > 0) {
-                    position = heightLeft - imgHeight + 10;
-                    doc.addPage();
                     doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
                     heightLeft -= pageHeight;
-                }
-                doc.save('UACE_Report.pdf');
-            } finally {
-                document.body.removeChild(container);
-            }
-        }
 
-        // optional: login with enter key
-        document.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter' && loginPage.style.display !== 'none') {
-                login();
-            }
-        });
+                    while (heightLeft > 0) {
+                        position = heightLeft - imgHeight + 10;
+                        doc.addPage();
+                        doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+                        heightLeft -= pageHeight;
+                    }
+                    doc.save('UACE_Report.pdf');
+                } finally {
+                    document.body.removeChild(container);
+                }
+            };
+        })();
     </script>
 </body>
 </html>
