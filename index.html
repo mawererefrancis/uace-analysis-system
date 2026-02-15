@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>UACE Advanced Analysis System</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body{
+    margin:0;
+    font-family:"Times New Roman", serif;
+    background:#f4f6f9;
+}
+
+#loginPage{
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+}
+
+.login-box{
+    background:white;
+    padding:40px;
+    width:350px;
+    box-shadow:0 0 15px rgba(0,0,0,0.2);
+    border-radius:8px;
+    text-align:center;
+}
+
+input{
+    width:100%;
+    padding:10px;
+    margin:10px 0;
+}
+
+button{
+    padding:10px 15px;
+    margin:5px;
+    cursor:pointer;
+}
+
+#mainPage{
+    display:none;
+    padding:20px;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:15px;
+}
+
+th,td{
+    border:1px solid black;
+    padding:5px;
+    text-align:center;
+}
+
+canvas{
+    margin-top:30px;
+}
+
+.print-page{
+    page-break-after:always;
+}
+
+@media print{
+    button{display:none;}
+}
+</style>
+</head>
+
+<body>
+
+<div id="loginPage">
+  <div class="login-box">
+    <h2>UACE Analysis Login</h2>
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="password" placeholder="Password">
+    <button onclick="login()">Login</button>
+    <p id="loginError" style="color:red;"></p>
+  </div>
+</div>
+
+<div id="mainPage">
+
+<h2>UACE Advanced Analysis System</h2>
+
+<input type="file" id="excelFile" accept=".xlsx,.xls">
+<button onclick="analyze()">Analyze</button>
+<button onclick="window.print()">Print</button>
+<button onclick="downloadExcel()">Download Excel</button>
+<button onclick="downloadPDF()">Download PDF</button>
+
+<div id="reportArea"></div>
+
+<canvas id="gradeChart"></canvas>
+<canvas id="subjectChart"></canvas>
+
+</div>
+
+<script>
+
+const gradePoints = {A:6,B:5,C:4,D:3,E:2,O:1,F:0};
+
+let gradeSummary;
+let candidatePoints;
+let subjectStats;
+
+function login(){
+    if(username.value==="admin" && password.value==="1234"){
+        loginPage.style.display="none";
+        mainPage.style.display="block";
+    }else{
+        loginError.innerText="Invalid Login";
+    }
+}
+
+function analyze(){
+
+gradeSummary={A:0,B:0,C:0,D:0,E:0,O:0,F:0};
+candidatePoints=[];
+subjectStats={};
+
+let file=excelFile.files[0];
+let reader=new FileReader();
+
+reader.onload=function(e){
+
+let data=new Uint8Array(e.target.result);
+let workbook=XLSX.read(data,{type:'array'});
+let sheet=workbook.Sheets[workbook.SheetNames[0]];
+let rows=XLSX.utils.sheet_to_json(sheet);
+
+rows.forEach(row=>{
+
+let totalPoints=0;
+let subjects=String(row['subject']||"").split(" ");
+
+subjects.forEach(item=>{
+
+if(!item.includes("-")) return;
+
+let parts=item.split("-");
+let subject=parts[0];
+let grade=parts[1].charAt(0).toUpperCase();
+
+if(!gradePoints.hasOwnProperty(grade)) grade="F";
+
+gradeSummary[grade]++;
+totalPoints+=gradePoints[grade];
+
+if(!subjectStats[subject]){
+    subjectStats[subject]={totalPoints:0,count:0};
+}
+
+subjectStats[subject].totalPoints+=gradePoints[grade];
+subjectStats[subject].count++;
+
+});
+
+candidatePoints.push({
+index:row["Index No."],
+name:row["Candidate Name"],
+sex:(row["Sex"]||"").toUpperCase(),
+points:totalPoints
+});
+
+});
+
+renderReport();
+drawCharts();
+
+};
+
+reader.readAsArrayBuffer(file);
+}
+
+function renderReport(){
+
+let total=candidatePoints.length;
+let pass=total-gradeSummary.F;
+let passPercent=((pass/total)*100).toFixed(1);
+
+candidatePoints.sort((a,b)=>b.points-a.points);
+
+let bestSubject="", worstSubject="";
+let bestAvg=0, worstAvg=100;
+
+for(let sub in subjectStats){
+let avg=subjectStats[sub].totalPoints/subjectStats[sub].count;
+if(avg>bestAvg){bestAvg=avg;bestSubject=sub;}
+if(avg<worstAvg){worstAvg=avg;worstSubject=sub;}
+}
+
+let bestMale = candidatePoints.filter(c=>c.sex==="M")[0];
+let bestFemale = candidatePoints.filter(c=>c.sex==="F")[0];
+
+let html=`
+<div class="print-page">
+
+<h2 style="text-align:center;">GRADE SUMMARY</h2>
+
+<table>
+<tr><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>O</th><th>F</th></tr>
+<tr>
+<td>${gradeSummary.A}</td>
+<td>${gradeSummary.B}</td>
+<td>${gradeSummary.C}</td>
+<td>${gradeSummary.D}</td>
+<td>${gradeSummary.E}</td>
+<td>${gradeSummary.O}</td>
+<td>${gradeSummary.F}</td>
+</tr>
+</table>
+
+<br>
+<strong>Candidates Sat:</strong> ${total}<br>
+<strong>Pass Percentage:</strong> ${passPercent}%<br><br>
+
+<h3>?? Best Subject: ${bestSubject} (Avg ${bestAvg.toFixed(2)})</h3>
+<h3>? Worst Subject: ${worstSubject} (Avg ${worstAvg.toFixed(2)})</h3>
+
+<br><hr><br>
+
+<h3>?? Best Male Candidate</h3>
+${bestMale ? `
+Name: ${bestMale.name}<br>
+Index: ${bestMale.index}<br>
+Points: ${bestMale.points}<br>
+` : "No Male Candidate"}
+
+<br>
+
+<h3>?? Best Female Candidate</h3>
+${bestFemale ? `
+Name: ${bestFemale.name}<br>
+Index: ${bestFemale.index}<br>
+Points: ${bestFemale.points}<br>
+` : "No Female Candidate"}
+
+</div>
+`;
+
+document.getElementById("reportArea").innerHTML=html;
+}
+
+function drawCharts(){
+
+new Chart(document.getElementById("gradeChart"),{
+type:"bar",
+data:{
+labels:["A","B","C","D","E","O","F"],
+datasets:[{
+label:"Grade Distribution",
+data:[
+gradeSummary.A,
+gradeSummary.B,
+gradeSummary.C,
+gradeSummary.D,
+gradeSummary.E,
+gradeSummary.O,
+gradeSummary.F
+]
+}]
+}
+});
+
+let labels=[];
+let averages=[];
+
+for(let sub in subjectStats){
+labels.push(sub);
+averages.push(
+(subjectStats[sub].totalPoints/subjectStats[sub].count).toFixed(2)
+);
+}
+
+new Chart(document.getElementById("subjectChart"),{
+type:"bar",
+data:{
+labels:labels,
+datasets:[{
+label:"Subject Average Points",
+data:averages
+}]
+}
+});
+}
+
+function downloadExcel(){
+let ws=XLSX.utils.json_to_sheet(candidatePoints);
+let wb=XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(wb,ws,"UACE Results");
+XLSX.writeFile(wb,"UACE_Advanced_Analysis.xlsx");
+}
+
+async function downloadPDF(){
+const { jsPDF } = window.jspdf;
+let doc=new jsPDF('l','mm','a4');
+doc.html(document.body,{
+callback:function(doc){
+doc.save("UACE_Advanced_Analysis.pdf");
+},
+x:10,
+y:10
+});
+}
+
+</script>
+
+</body>
+</html>
