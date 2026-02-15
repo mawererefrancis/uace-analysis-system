@@ -182,7 +182,7 @@
                 DHP: "DHOPADHOLA", LIT: "LITERATURE IN ENGLISH", ENT: "ENTREPRENEURSHIP EDUCATION",
                 KIS: "KISWAHILI", LAN: "LANGO", PE: "PHYSICAL EDUCATION", PA: "PERFORMING ARTS",
                 FRE: "FRENCH",
-                // subsidiaries (keep codes as keys)
+                // subsidiaries
                 GEP: "GENERAL PAPER", CST: "ICT (SUBSIDIARY)", SMA: "SUB-MTC (SUBSIDIARY)"
             };
 
@@ -288,12 +288,27 @@
                             const sex = sexRaw.toString().trim().charAt(0).toUpperCase() === 'M' ? 'M' : 'F';
                             const subjectsStr = row['Subjects'] || row['subject'] || '';
 
-                            const tokens = subjectsStr.toString().split(/\s+/);
+                            // Split by spaces, but combine subject code + bracket
+                            const parts = subjectsStr.toString().split(/\s+/);
+                            let combinedTokens = [];
+                            for (let i = 0; i < parts.length; i++) {
+                                if (parts[i].startsWith('[')) {
+                                    // attach to previous token if exists
+                                    if (combinedTokens.length > 0) {
+                                        combinedTokens[combinedTokens.length-1] += ' ' + parts[i];
+                                    } else {
+                                        // orphan bracket? ignore
+                                    }
+                                } else {
+                                    combinedTokens.push(parts[i]);
+                                }
+                            }
+
                             let totalPoints = 0;
                             let principlePasses = 0; // count of A-E in principle subjects
                             const subjectDetails = [];
 
-                            tokens.forEach(token => {
+                            combinedTokens.forEach(token => {
                                 if (!token.includes('-') || !token.includes('[')) return;
                                 const parsed = parseSubjectEntry(token);
                                 if (!parsed) return;
@@ -318,7 +333,7 @@
                                     principlePasses += 1;
                                 }
 
-                                subjectDetails.push({ code: fullName, grade: gradeLetter }); // store full name for export
+                                subjectDetails.push({ code: fullName, grade: gradeLetter });
                             });
 
                             candidatePoints.push({
@@ -336,7 +351,7 @@
                             return;
                         }
 
-                        // Sort by points descending, then maybe by name
+                        // Sort by points descending, then by name
                         candidatePoints.sort((a,b) => b.points - a.points || a.name.localeCompare(b.name));
                         bestFifteen = candidatePoints.slice(0, 15);
 
@@ -472,7 +487,6 @@
             // ---------- EXPORT ----------
             window.downloadExcel = function() {
                 if (!candidatePoints.length) return alert('Nothing to export. Run analysis first.');
-                // Export all candidates with their details (subject grades optionally, but user may not want them)
                 const exportRows = candidatePoints.map(c => ({
                     'IndexNo': c.index,
                     'Name': c.name,
