@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UACE Advanced Analysis · Mawerere Francis</title>
+    <title>UACE Master Analyzer · Mawerere Francis</title>
     <!-- Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -80,21 +80,26 @@
         }
         .card h3 { color: #0b5f78; font-weight: 600; font-size: 1.2rem; margin-bottom: 10px; }
         .card .big-number { font-size: 3rem; font-weight: 800; color: #0a3a48; line-height: 1; }
-        .grade-summary-table, .subject-summary-table, .subsidiary-table, .principles-table {
+        /* Tables */
+        .summary-table {
             background: white; border-radius: 28px; padding: 25px; margin: 30px 0; box-shadow: 0 12px 28px rgba(0,50,70,0.15);
+            overflow-x: auto;
         }
-        .grade-summary-table table, .subject-summary-table table, .subsidiary-table table, .principles-table table {
+        .summary-table h3 {
+            background: linear-gradient(145deg, #0f5e75, #0a4152); color: white; padding: 14px 20px;
+            border-radius: 40px 40px 20px 20px; margin: -25px -25px 20px -25px; font-size: 1.3rem;
+        }
+        .summary-table table {
             width: 100%; border-collapse: collapse; text-align: center; font-size: 0.9rem;
         }
-        .grade-summary-table th, .subject-summary-table th, .subsidiary-table th, .principles-table th {
-            background: #104f63; color: white; padding: 10px 0; font-weight: 600;
+        .summary-table th {
+            background: #104f63; color: white; padding: 12px 5px; font-weight: 600;
         }
-        .grade-summary-table td, .subject-summary-table td, .subsidiary-table td, .principles-table td {
-            padding: 8px 0; background: #f6fbfe; border: 1px solid #bdd7e4;
+        .summary-table td {
+            padding: 10px 5px; background: #f6fbfe; border: 1px solid #bdd7e4;
         }
-        .section-title {
-            font-size: 2rem; font-weight: 700; margin: 40px 0 20px; color: #0b4153;
-            border-left: 10px solid #0d6f88; padding-left: 20px;
+        .summary-table tr.total-row td {
+            background: #d4eaf3; font-weight: 700; border-top: 3px solid #0a5e74;
         }
         .best-table, .points-table {
             width: 100%; border-collapse: collapse; background: white; border-radius: 24px; overflow: hidden;
@@ -102,9 +107,9 @@
         }
         .best-table th, .points-table th { background: #063b49; color: white; padding: 12px 8px; font-weight: 600; }
         .best-table td, .points-table td { padding: 10px 8px; border-bottom: 1px solid #cbdbe9; text-align: left; }
-        .best-table td:first-child, .points-table td:first-child { text-align: center; }
         .best-table td:nth-child(5), .points-table td:nth-child(4) { text-align: center; } /* points column */
         .best-table td:nth-child(6) { text-align: center; } /* principle passes column */
+        .points-table td:nth-child(4) { text-align: center; }
         .best-table tr:nth-child(even), .points-table tr:nth-child(even) { background: #f3f9ff; }
         .badge {
             background: #0d6f88; color: white; border-radius: 40px; padding: 4px 12px; font-weight: 500;
@@ -126,7 +131,7 @@
     <div id="loginPage">
         <div class="login-card">
             <h2>UACE</h2>
-            <div class="sub">Advanced Analysis System</div>
+            <div class="sub">Master Analyzer</div>
             <div class="input-group"><label>Username</label><input type="text" id="username" value="admin"></div>
             <div class="input-group"><label>Password</label><input type="password" id="password" value="1234"></div>
             <button class="login-btn" onclick="login()">LOGIN & ACCESS</button>
@@ -141,7 +146,7 @@
     <!-- MAIN APPLICATION -->
     <div id="mainPage">
         <div class="app-header">
-            <h1>📊 UACE RESULT ANALYZER</h1>
+            <h1>📊 UACE ADVANCED ANALYZER</h1>
             <div class="btn-group">
                 <button class="primary-btn" onclick="analyze()">▶ Analyze</button>
                 <button onclick="window.print()">🖨️ Print</button>
@@ -154,7 +159,7 @@
         <div class="upload-area no-print">
             <button class="file-btn" onclick="document.getElementById('excelFile').click()">📂 Choose Excel File</button>
             <input type="file" id="excelFile" accept=".xlsx,.xls">
-            <span style="color:#136476;">Upload UACE sheet (columns: IndexNo, Sex, Candidate_Name, Res. Code, Subjects)</span>
+            <span style="color:#136476;">Upload UACE sheet (columns: IndexNo, Sex, Candidate_Name, Subjects)</span>
         </div>
 
         <div id="reportArea"></div>
@@ -169,18 +174,23 @@
         (function() {
             // ---------- CONFIG ----------
             const gradePoints = { 'A':6, 'B':5, 'C':4, 'D':3, 'E':2, 'O':1, 'F':0 };
-            // numeric grade to letter for subsidiary subjects (1-6 -> O, 7-9 -> F)
+            // numeric grade to letter for subsidiary (1-6 -> O, 7-9 -> F)
             function numericToGrade(num) {
                 if (num >= 1 && num <= 6) return 'O';
                 return 'F';
             }
+            // for display of subsidiary grades with subscript
+            function formatSubsidiaryGrade(num) {
+                const map = {1:'D₁',2:'D₂',3:'C₃',4:'C₄',5:'C₅',6:'C₆',7:'P₇',8:'P₈',9:'F₉'};
+                return map[num] || num;
+            }
 
-            // subject code to full name mapping (with additions)
+            // subject code to full name mapping (expanded)
             const SUBJECT_NAMES = {
                 ENG: "ENGLISH", HIS: "HISTORY", GEO: "GEOGRAPHY", MAT: "MATHEMATICS", MTC: "MATHEMATICS",
                 PHY: "PHYSICS", CHE: "CHEMISTRY", BIO: "BIOLOGY", IPS: "IPS",
                 CRE: "CRE", COM: "COMMERCE", IRE: "IRE", AGR: "AGRICULTURE",
-                DHP: "DHOPADHOLA", LIT: "LITERATURE IN ENGLISH", ENT: "ENTREPRENEURSHIP EDUCATION",
+                DHP: "DHOPADHOLA", LIT: "LITERATURE IN ENGLISH", ENT: "ENTREPRENEURSHIP",
                 KIS: "KISWAHILI", LAN: "LANGO", PE: "PHYSICAL EDUCATION", PA: "PERFORMING ARTS",
                 FRE: "FRENCH", ECO: "ECONOMICS", ECON: "ECONOMICS",
                 // subsidiaries
@@ -192,13 +202,18 @@
 
             // global data stores
             let gradeSummary = { A:0, B:0, C:0, D:0, E:0, O:0, F:0 };
-            // For principle subjects (excluding subsidiaries): { fullName: { A, B, C, D, E, O, F, total, pass } }
+            // principle subjects (excluding subsidiaries): { fullName: { A, B, C, D, E, O, F, total, pass } }
             let principleSubjectStats = {};
-            // For subsidiary subjects: { fullName: { grade1..9 counts, total, pass } }
+            // subsidiary subjects: { fullName: { 1..9 counts, total, pass } }
             let subsidiarySubjectStats = {};
-            let candidatePoints = [];      // { index, name, sex, points, principlePasses }
+            // paper statistics: { subjectCode: { paperNumber: { 1:0,2:0,...,9:0, total } } }
+            let paperStats = {};
+            // candidate data extended
+            let candidatePoints = [];      // { index, name, sex, points, principlePasses, combination, gradeString, subjectsDetailed }
             let bestFifteen = [];
-            let principlePassCounts = { '3':0, '2':0, '1':0, '0':0 }; // number of candidates with 3,2,1,0 principle passes
+            let principlePassCounts = { '3':0, '2':0, '1':0, '0':0 };
+            // gender based principle passes
+            let genderPrinciple = { M: {3:0,2:0,1:0,0:0}, F: {3:0,2:0,1:0,0:0} };
 
             // DOM elements
             const loginPage = document.getElementById('loginPage');
@@ -237,17 +252,13 @@
 
             // ---------- PARSING ----------
             function parseOverallGrade(token, isSubsidiary) {
-                if (!token || token.trim() === '') return 'F';
+                if (!token || token.trim() === '') return isSubsidiary ? 9 : 'F';
                 const trimmed = token.trim();
                 if (isSubsidiary) {
-                    // numeric grade expected (e.g., "5", "9")
                     const num = parseInt(trimmed, 10);
-                    if (!isNaN(num) && num >= 1 && num <= 9) {
-                        return num; // return numeric for subsidiary grading
-                    }
-                    return 9; // treat as F9
+                    if (!isNaN(num) && num >= 1 && num <= 9) return num;
+                    return 9;
                 } else {
-                    // principle subject: letter grade (A-F, O)
                     const first = trimmed.charAt(0).toUpperCase();
                     if (gradePoints.hasOwnProperty(first)) return first;
                     return 'F';
@@ -255,15 +266,32 @@
             }
 
             function parseSubjectEntry(entry) {
-                // matches "SUBJECT-GRADE [paper details]"
-                const regex = /^([A-Za-z]+)-([A-Z0-9]+)\s*\[.*\]$/;
+                // matches "CODE-GRADE [paper details]"
+                const regex = /^([A-Za-z]+)-([A-Z0-9]+)\s*\[(.*?)\]$/;
                 const match = entry.match(regex);
                 if (!match) return null;
                 const code = match[1];
                 const overallToken = match[2];
+                const paperStr = match[3];
                 const isSub = subsidiaryCodes.has(code);
                 const grade = parseOverallGrade(overallToken, isSub);
-                return { code, grade, isSubsidiary: isSub };
+
+                // parse paper grades
+                const paperGrades = [];
+                if (paperStr.trim() !== '') {
+                    const parts = paperStr.split(',');
+                    parts.forEach(p => {
+                        const pair = p.split('-');
+                        if (pair.length === 2) {
+                            const paperNum = parseInt(pair[0].trim(), 10);
+                            const paperGrade = parseInt(pair[1].trim(), 10);
+                            if (!isNaN(paperNum) && !isNaN(paperGrade) && paperGrade >=1 && paperGrade <=9) {
+                                paperGrades.push({ paper: paperNum, grade: paperGrade });
+                            }
+                        }
+                    });
+                }
+                return { code, grade, isSubsidiary: isSub, paperGrades };
             }
 
             // ---------- ANALYSIS ----------
@@ -285,8 +313,10 @@
                         gradeSummary = { A:0, B:0, C:0, D:0, E:0, O:0, F:0 };
                         principleSubjectStats = {};
                         subsidiarySubjectStats = {};
+                        paperStats = {};
                         candidatePoints = [];
                         principlePassCounts = { '3':0, '2':0, '1':0, '0':0 };
+                        genderPrinciple = { M: {3:0,2:0,1:0,0:0}, F: {3:0,2:0,1:0,0:0} };
 
                         rows.forEach(row => {
                             const indexNo = row['IndexNo'] || row['Index No.'] || '';
@@ -295,16 +325,13 @@
                             const sex = sexRaw.toString().trim().charAt(0).toUpperCase() === 'M' ? 'M' : 'F';
                             const subjectsStr = row['Subjects'] || row['subject'] || '';
 
-                            // Split by spaces, but combine subject code + bracket
+                            // Split by spaces, combine brackets with previous token
                             const parts = subjectsStr.toString().split(/\s+/);
                             let combinedTokens = [];
                             for (let i = 0; i < parts.length; i++) {
                                 if (parts[i].startsWith('[')) {
-                                    // attach to previous token if exists
                                     if (combinedTokens.length > 0) {
                                         combinedTokens[combinedTokens.length-1] += ' ' + parts[i];
-                                    } else {
-                                        // orphan bracket? ignore
                                     }
                                 } else {
                                     combinedTokens.push(parts[i]);
@@ -312,23 +339,33 @@
                             }
 
                             let totalPoints = 0;
-                            let principlePasses = 0; // count of A-E in principle subjects
-                            const subjectDetails = [];
+                            let principlePasses = 0; // count of A-E in principle subjects (now includes O for pass? we'll change later)
+                            const subjectDetails = []; // store { code, grade, isSubsidiary, paperGrades }
 
                             combinedTokens.forEach(token => {
                                 if (!token.includes('-') || !token.includes('[')) return;
                                 const parsed = parseSubjectEntry(token);
                                 if (!parsed) return;
-                                const { code, grade, isSubsidiary } = parsed;
-                                const fullName = SUBJECT_NAMES[code] || code; // fallback to code if not in map
+                                const { code, grade, isSubsidiary, paperGrades } = parsed;
+                                const fullName = SUBJECT_NAMES[code] || code;
+
+                                // Update paper stats
+                                if (!paperStats[code]) paperStats[code] = {};
+                                paperGrades.forEach(pg => {
+                                    const p = pg.paper;
+                                    const g = pg.grade;
+                                    if (!paperStats[code][p]) {
+                                        paperStats[code][p] = { 1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0, total:0 };
+                                    }
+                                    paperStats[code][p][g] += 1;
+                                    paperStats[code][p].total += 1;
+                                });
 
                                 let gradeLetter;
                                 if (isSubsidiary) {
-                                    // grade is numeric (1-9)
                                     gradeLetter = numericToGrade(grade); // O or F for overall summary
                                     // update subsidiary stats
                                     if (!subsidiarySubjectStats[fullName]) {
-                                        // initialize with 1-9 counts
                                         let obj = { total:0, pass:0 };
                                         for (let i=1; i<=9; i++) obj[i] = 0;
                                         subsidiarySubjectStats[fullName] = obj;
@@ -338,31 +375,51 @@
                                     if (grade >=1 && grade <=6) subsidiarySubjectStats[fullName].pass += 1;
                                 } else {
                                     gradeLetter = grade; // letter
-                                    // update principle stats
                                     if (!principleSubjectStats[fullName]) {
                                         principleSubjectStats[fullName] = { A:0, B:0, C:0, D:0, E:0, O:0, F:0, total:0, pass:0 };
                                     }
                                     principleSubjectStats[fullName][gradeLetter] += 1;
                                     principleSubjectStats[fullName].total += 1;
-                                    if (['A','B','C','D','E'].includes(gradeLetter)) {
+                                    // Pass definition now includes O (A through O)
+                                    if (['A','B','C','D','E','O'].includes(gradeLetter)) {
                                         principleSubjectStats[fullName].pass += 1;
                                     }
                                 }
 
-                                // Update overall grade summary (using gradeLetter for consistency)
+                                // Update overall grade summary (using gradeLetter)
                                 if (gradeSummary.hasOwnProperty(gradeLetter)) gradeSummary[gradeLetter] += 1;
                                 else gradeSummary['F'] += 1;
 
                                 const points = gradePoints[gradeLetter] || 0;
                                 totalPoints += points;
 
-                                // Count principle passes (A-E) for principle subjects only
-                                if (!isSubsidiary && ['A','B','C','D','E'].includes(gradeLetter)) {
+                                // Count principle passes (A through O) for principle subjects only
+                                if (!isSubsidiary && ['A','B','C','D','E','O'].includes(gradeLetter)) {
                                     principlePasses += 1;
                                 }
 
-                                subjectDetails.push({ code: fullName, grade: gradeLetter });
+                                subjectDetails.push({ code, grade: isSubsidiary ? grade : gradeLetter, isSubsidiary, paperGrades, fullName });
                             });
+
+                            // Determine combination and grade string
+                            let gepGrade = null, subsidiaryGrade = null, subsidiaryCode = null;
+                            const principals = [];
+                            // preserve order as they appear in subjectDetails
+                            subjectDetails.forEach(s => {
+                                if (s.code === 'GEP') gepGrade = s.grade;
+                                else if (s.code === 'CST' || s.code === 'SMA') {
+                                    subsidiaryGrade = s.grade;
+                                    subsidiaryCode = s.code;
+                                } else if (!subsidiaryCodes.has(s.code)) {
+                                    principals.push(s);
+                                }
+                            });
+                            // ensure we have 3 principals (if not, pad with empty)
+                            while (principals.length < 3) principals.push({ code: '???', grade: '?' });
+                            const combination = principals.map(p => p.code.charAt(0)).join('');
+                            const gradeString = (gepGrade !== null ? gepGrade : '?') +
+                                                principals.map(p => p.grade).join('') +
+                                                (subsidiaryGrade !== null ? subsidiaryGrade : '?');
 
                             candidatePoints.push({
                                 index: indexNo,
@@ -370,14 +427,29 @@
                                 sex: sex,
                                 points: totalPoints,
                                 principlePasses: principlePasses,
-                                subjects: subjectDetails
+                                combination: combination + (subsidiaryCode ? '/' + (subsidiaryCode === 'CST' ? 'ICT' : 'S-MTC') : ''),
+                                gradeString: gradeString,
+                                subjects: subjectDetails // for detailed view
                             });
 
-                            // Update principle pass counts
+                            // Update principle pass counts (now including O)
                             if (principlePasses >= 3) principlePassCounts['3'] += 1;
                             else if (principlePasses === 2) principlePassCounts['2'] += 1;
                             else if (principlePasses === 1) principlePassCounts['1'] += 1;
                             else principlePassCounts['0'] += 1;
+
+                            // Gender based
+                            if (sex === 'M') {
+                                if (principlePasses >= 3) genderPrinciple.M['3'] += 1;
+                                else if (principlePasses === 2) genderPrinciple.M['2'] += 1;
+                                else if (principlePasses === 1) genderPrinciple.M['1'] += 1;
+                                else genderPrinciple.M['0'] += 1;
+                            } else {
+                                if (principlePasses >= 3) genderPrinciple.F['3'] += 1;
+                                else if (principlePasses === 2) genderPrinciple.F['2'] += 1;
+                                else if (principlePasses === 1) genderPrinciple.F['1'] += 1;
+                                else genderPrinciple.F['0'] += 1;
+                            }
                         });
 
                         if (candidatePoints.length === 0) {
@@ -402,40 +474,56 @@
             // ---------- RENDER REPORT ----------
             function renderReport() {
                 const totalCandidates = candidatePoints.length;
-                const totalF = gradeSummary.F || 0;
-                const passed = totalCandidates - totalF;
-                const passPercent = totalCandidates ? ((passed / totalCandidates) * 100).toFixed(1) : 0;
+                // overall pass based on at least 2 principle passes (A-O)
+                const overallPassed = candidatePoints.filter(c => c.principlePasses >= 2).length;
+                const passPercent = totalCandidates ? ((overallPassed / totalCandidates) * 100).toFixed(1) : 0;
                 const bestMale = candidatePoints.find(c => c.sex === 'M') || null;
                 const bestFemale = candidatePoints.find(c => c.sex === 'F') || null;
 
-                // Sort principle subjects by pass percentage descending
+                // Principle subjects (ranked by pass % where pass includes O)
                 const principleEntries = Object.entries(principleSubjectStats).map(([name, stats]) => {
                     const passPercent = stats.total ? ((stats.pass / stats.total) * 100).toFixed(1) : 0;
                     return { name, ...stats, passPercent };
                 });
                 principleEntries.sort((a,b) => b.passPercent - a.passPercent || a.name.localeCompare(b.name));
-
-                // Build principle subjects table
-                let principleRows = '';
+                let principleRows = '', principleTotal = { A:0,B:0,C:0,D:0,E:0,O:0,F:0, total:0, pass:0 };
                 principleEntries.forEach(s => {
                     principleRows += `<tr><td style="text-align:left; padding-left:10px;">${s.name}</td>
                         <td>${s.A}</td><td>${s.B}</td><td>${s.C}</td><td>${s.D}</td><td>${s.E}</td><td>${s.O}</td><td>${s.F}</td>
                         <td>${s.total}</td><td>${s.passPercent}%</td></tr>`;
+                    principleTotal.A += s.A; principleTotal.B += s.B; principleTotal.C += s.C;
+                    principleTotal.D += s.D; principleTotal.E += s.E; principleTotal.O += s.O;
+                    principleTotal.F += s.F; principleTotal.total += s.total; principleTotal.pass += s.pass;
                 });
+                const principleTotalPercent = principleTotal.total ? ((principleTotal.pass/principleTotal.total)*100).toFixed(1) : 0;
+                principleRows += `<tr class="total-row"><td><strong>TOTAL</strong></td>
+                    <td><strong>${principleTotal.A}</strong></td><td><strong>${principleTotal.B}</strong></td>
+                    <td><strong>${principleTotal.C}</strong></td><td><strong>${principleTotal.D}</strong></td>
+                    <td><strong>${principleTotal.E}</strong></td><td><strong>${principleTotal.O}</strong></td>
+                    <td><strong>${principleTotal.F}</strong></td><td><strong>${principleTotal.total}</strong></td>
+                    <td><strong>${principleTotalPercent}%</strong></td></tr>`;
 
-                // Subsidiary subjects: sort by pass percentage descending
+                // Subsidiary subjects (with formatted grades)
                 const subsidiaryEntries = Object.entries(subsidiarySubjectStats).map(([name, stats]) => {
                     const passPercent = stats.total ? ((stats.pass / stats.total) * 100).toFixed(1) : 0;
                     return { name, ...stats, passPercent };
                 });
                 subsidiaryEntries.sort((a,b) => b.passPercent - a.passPercent || a.name.localeCompare(b.name));
-
-                let subsidiaryRows = '';
+                let subsidiaryRows = '', subTotal = { total:0, pass:0, g1:0,g2:0,g3:0,g4:0,g5:0,g6:0,g7:0,g8:0,g9:0 };
                 subsidiaryEntries.forEach(s => {
                     subsidiaryRows += `<tr><td style="text-align:left; padding-left:10px;">${s.name}</td>
-                        <td>${s[1]||0}</td><td>${s[2]||0}</td><td>${s[3]||0}</td><td>${s[4]||0}</td><td>${s[5]||0}</td><td>${s[6]||0}</td><td>${s[7]||0}</td><td>${s[8]||0}</td><td>${s[9]||0}</td>
-                        <td>${s.total}</td><td>${s.passPercent}%</td></tr>`;
+                        <td>${s[1]||0}</td><td>${s[2]||0}</td><td>${s[3]||0}</td><td>${s[4]||0}</td><td>${s[5]||0}</td><td>${s[6]||0}</td>
+                        <td>${s[7]||0}</td><td>${s[8]||0}</td><td>${s[9]||0}</td><td>${s.total}</td><td>${s.passPercent}%</td></tr>`;
+                    subTotal.total += s.total; subTotal.pass += s.pass;
+                    subTotal.g1 += s[1]||0; subTotal.g2 += s[2]||0; subTotal.g3 += s[3]||0;
+                    subTotal.g4 += s[4]||0; subTotal.g5 += s[5]||0; subTotal.g6 += s[6]||0;
+                    subTotal.g7 += s[7]||0; subTotal.g8 += s[8]||0; subTotal.g9 += s[9]||0;
                 });
+                const subTotalPercent = subTotal.total ? ((subTotal.pass/subTotal.total)*100).toFixed(1) : 0;
+                subsidiaryRows += `<tr class="total-row"><td><strong>TOTAL</strong></td>
+                    <td>${subTotal.g1}</td><td>${subTotal.g2}</td><td>${subTotal.g3}</td><td>${subTotal.g4}</td>
+                    <td>${subTotal.g5}</td><td>${subTotal.g6}</td><td>${subTotal.g7}</td><td>${subTotal.g8}</td><td>${subTotal.g9}</td>
+                    <td><strong>${subTotal.total}</strong></td><td><strong>${subTotalPercent}%</strong></td></tr>`;
 
                 // Principles obtained table
                 const principlesRows = `
@@ -445,49 +533,76 @@
                     <tr><td>0</td><td>${principlePassCounts['0']}</td></tr>
                 `;
 
+                // Gender × principle passes
+                const genderRows = `
+                    <tr><th>Gender</th><th>3 passes</th><th>2 passes</th><th>1 pass</th><th>0 passes</th></tr>
+                    <tr><td>Male</td><td>${genderPrinciple.M['3']}</td><td>${genderPrinciple.M['2']}</td><td>${genderPrinciple.M['1']}</td><td>${genderPrinciple.M['0']}</td></tr>
+                    <tr><td>Female</td><td>${genderPrinciple.F['3']}</td><td>${genderPrinciple.F['2']}</td><td>${genderPrinciple.F['1']}</td><td>${genderPrinciple.F['0']}</td></tr>
+                `;
+
+                // Paper summary table
+                let paperHtml = '';
+                for (let code in paperStats) {
+                    const fullName = SUBJECT_NAMES[code] || code;
+                    const papers = paperStats[code];
+                    const sortedPapers = Object.keys(papers).sort((a,b) => a-b);
+                    sortedPapers.forEach(p => {
+                        const stats = papers[p];
+                        paperHtml += `<tr><td>${fullName}</td><td>PP${p}</td>
+                            <td>${stats[1]||0}</td><td>${stats[2]||0}</td><td>${stats[3]||0}</td><td>${stats[4]||0}</td>
+                            <td>${stats[5]||0}</td><td>${stats[6]||0}</td><td>${stats[7]||0}</td><td>${stats[8]||0}</td><td>${stats[9]||0}</td>
+                            <td>${stats.total}</td></tr>`;
+                    });
+                }
+
                 let html = `
                     <div class="info-cards">
                         <div class="card"><h3>📋 Candidates Sat</h3><div class="big-number">${totalCandidates}</div></div>
-                        <div class="card"><h3>✅ Pass Percentage</h3><div class="big-number">${passPercent}%</div></div>
+                        <div class="card"><h3>✅ Pass (≥2 prin.)</h3><div class="big-number">${passPercent}%</div></div>
                         <div class="card"><h3>🏆 Top Points</h3><div class="big-number">${candidatePoints[0]?.points || 0}</div></div>
                     </div>
 
-                    <!-- Overall Grade Distribution -->
-                    <div class="grade-summary-table">
-                        <h3 style="margin-bottom:20px;">📊 OVERALL GRADE DISTRIBUTION (All Subjects)</h3>
-                        <table>
-                            <tr><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>O</th><th>F</th></tr>
-                            <tr>
-                                <td>${gradeSummary.A}</td><td>${gradeSummary.B}</td><td>${gradeSummary.C}</td>
-                                <td>${gradeSummary.D}</td><td>${gradeSummary.E}</td><td>${gradeSummary.O}</td><td>${gradeSummary.F}</td>
-                            </tr>
-                        </table>
-                    </div>
-
-                    <!-- Principle Subjects (ranked by pass %) -->
-                    <div class="subject-summary-table">
-                        <h3 style="margin-bottom:20px;">📚 PRINCIPLE SUBJECTS (A-E = Pass) - Ranked by %Pass</h3>
+                    <!-- Principle Subjects (A-O = Pass) -->
+                    <div class="summary-table">
+                        <h3>📚 PRINCIPLE SUBJECTS (A-O = Pass) - Ranked by %Pass</h3>
                         <table>
                             <thead><tr><th>Subject</th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>O</th><th>F</th><th>Sat</th><th>%Pass</th></tr></thead>
-                            <tbody>${principleRows || '<tr><td colspan="10">No principle subject data</td></tr>'}</tbody>
+                            <tbody>${principleRows}</tbody>
                         </table>
                     </div>
 
-                    <!-- Subsidiary Subjects (GEP, CST, SMA) with numeric grades -->
-                    <div class="subsidiary-table">
-                        <h3 style="margin-bottom:20px;">📊 SUBSIDIARY SUBJECTS (1-6 = Pass) - Ranked by %Pass</h3>
+                    <!-- Subsidiary Subjects with formatted grades -->
+                    <div class="summary-table">
+                        <h3>📊 SUBSIDIARY SUBJECTS (D₁–C₆ = Pass) - Ranked by %Pass</h3>
                         <table>
-                            <thead><tr><th>Subject</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th><th>Sat</th><th>%Pass</th></tr></thead>
-                            <tbody>${subsidiaryRows || '<tr><td colspan="11">No subsidiary data</td></tr>'}</tbody>
+                            <thead><tr><th>Subject</th><th>D₁</th><th>D₂</th><th>C₃</th><th>C₄</th><th>C₅</th><th>C₆</th><th>P₇</th><th>P₈</th><th>F₉</th><th>Sat</th><th>%Pass</th></tr></thead>
+                            <tbody>${subsidiaryRows}</tbody>
                         </table>
                     </div>
 
                     <!-- Principles Obtained Table -->
-                    <div class="principles-table">
-                        <h3 style="margin-bottom:20px;">🎓 NUMBER OF PRINCIPLE PASSES PER CANDIDATE</h3>
+                    <div class="summary-table">
+                        <h3>🎓 NUMBER OF PRINCIPLE PASSES PER CANDIDATE</h3>
                         <table>
                             <thead><tr><th>Principle Passes</th><th>Number of Candidates</th></tr></thead>
                             <tbody>${principlesRows}</tbody>
+                        </table>
+                    </div>
+
+                    <!-- Gender × Principle Passes -->
+                    <div class="summary-table">
+                        <h3>⚥ GENDER WISE PRINCIPLE PASSES</h3>
+                        <table>
+                            ${genderRows}
+                        </table>
+                    </div>
+
+                    <!-- Paper Level Analysis -->
+                    <div class="summary-table">
+                        <h3>📄 PAPER GRADE DISTRIBUTION (per subject & paper)</h3>
+                        <table>
+                            <thead><tr><th>Subject</th><th>Paper</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th><th>Sat</th></tr></thead>
+                            <tbody>${paperHtml || '<tr><td colspan="12">No paper data available</td></tr>'}</tbody>
                         </table>
                     </div>
 
@@ -506,10 +621,18 @@
                 });
                 html += `</tbody></table>`;
 
-                html += `<h2 class="section-title">📋 LEARNER POINTS LIST (All Candidates)</h2>`;
-                html += `<table class="points-table"><thead><tr><th>Index No</th><th>Name</th><th>Sex</th><th>Total Points</th></tr></thead><tbody>`;
+                // All candidates with combination, grade, and subject grades
+                html += `<h2 class="section-title">📋 LEARNER DETAILS (All Candidates)</h2>`;
+                html += `<table class="points-table"><thead><tr>
+                    <th>Index</th><th>Name</th><th>Sex</th><th>Combination</th><th>Grade</th><th>Points</th><th>Subjects (Grade)</th>
+                </tr></thead><tbody>`;
                 candidatePoints.forEach(c => {
-                    html += `<tr><td>${c.index}</td><td style="text-align:left;">${c.name}</td><td>${c.sex}</td><td>${c.points}</td></tr>`;
+                    const subjectsList = c.subjects.map(s => `${s.code}(${s.grade})`).join(', ');
+                    html += `<tr>
+                        <td>${c.index}</td><td style="text-align:left;">${c.name}</td><td>${c.sex}</td>
+                        <td>${c.combination}</td><td>${c.gradeString}</td><td>${c.points}</td>
+                        <td style="text-align:left; font-size:0.8rem;">${subjectsList}</td>
+                    </tr>`;
                 });
                 html += `</tbody></table>`;
 
@@ -565,29 +688,21 @@
                 }
             }
 
-            // ---------- EXPORT EXCEL (multiple sheets) ----------
+            // ---------- EXPORT EXCEL ----------
             window.downloadExcel = function() {
                 if (!candidatePoints.length) return alert('Nothing to export. Run analysis first.');
                 const wb = XLSX.utils.book_new();
 
-                // 1. Overall grades
-                const overallData = [['Grade','Count']];
-                for (let g of ['A','B','C','D','E','O','F']) {
-                    overallData.push([g, gradeSummary[g]]);
-                }
-                let ws = XLSX.utils.aoa_to_sheet(overallData);
-                XLSX.utils.book_append_sheet(wb, ws, 'Overall Grades');
-
-                // 2. Principle subjects
+                // 1. Principle subjects
                 const principleEntries = Object.entries(principleSubjectStats).map(([name, stats]) => ({
                     Subject: name, A: stats.A, B: stats.B, C: stats.C, D: stats.D, E: stats.E, O: stats.O, F: stats.F,
                     Sat: stats.total, PassPercent: stats.total ? ((stats.pass/stats.total)*100).toFixed(1) : 0
                 }));
                 principleEntries.sort((a,b) => b.PassPercent - a.PassPercent);
-                ws = XLSX.utils.json_to_sheet(principleEntries);
+                let ws = XLSX.utils.json_to_sheet(principleEntries);
                 XLSX.utils.book_append_sheet(wb, ws, 'Principle Subjects');
 
-                // 3. Subsidiary subjects
+                // 2. Subsidiary subjects
                 const subsidiaryEntries = Object.entries(subsidiarySubjectStats).map(([name, stats]) => {
                     let obj = { Subject: name, Sat: stats.total, PassPercent: stats.total ? ((stats.pass/stats.total)*100).toFixed(1) : 0 };
                     for (let i=1; i<=9; i++) obj[`Grade ${i}`] = stats[i] || 0;
@@ -597,7 +712,7 @@
                 ws = XLSX.utils.json_to_sheet(subsidiaryEntries);
                 XLSX.utils.book_append_sheet(wb, ws, 'Subsidiary Subjects');
 
-                // 4. Principles obtained
+                // 3. Principles obtained
                 const principlesData = [['Principle Passes','Number of Candidates']];
                 principlesData.push(['3', principlePassCounts['3']]);
                 principlesData.push(['2', principlePassCounts['2']]);
@@ -606,30 +721,62 @@
                 ws = XLSX.utils.aoa_to_sheet(principlesData);
                 XLSX.utils.book_append_sheet(wb, ws, 'Principles Obtained');
 
-                // 5. Best 15
+                // 4. Gender × principles
+                const genderData = [
+                    ['Gender','3 passes','2 passes','1 pass','0 passes'],
+                    ['Male', genderPrinciple.M['3'], genderPrinciple.M['2'], genderPrinciple.M['1'], genderPrinciple.M['0']],
+                    ['Female', genderPrinciple.F['3'], genderPrinciple.F['2'], genderPrinciple.F['1'], genderPrinciple.F['0']]
+                ];
+                ws = XLSX.utils.aoa_to_sheet(genderData);
+                XLSX.utils.book_append_sheet(wb, ws, 'Gender Passes');
+
+                // 5. Paper summary
+                const paperRows = [];
+                for (let code in paperStats) {
+                    const fullName = SUBJECT_NAMES[code] || code;
+                    for (let p in paperStats[code]) {
+                        const stats = paperStats[code][p];
+                        paperRows.push({
+                            Subject: fullName,
+                            Paper: `PP${p}`,
+                            '1': stats[1]||0, '2': stats[2]||0, '3': stats[3]||0, '4': stats[4]||0,
+                            '5': stats[5]||0, '6': stats[6]||0, '7': stats[7]||0, '8': stats[8]||0, '9': stats[9]||0,
+                            Sat: stats.total
+                        });
+                    }
+                }
+                ws = XLSX.utils.json_to_sheet(paperRows);
+                XLSX.utils.book_append_sheet(wb, ws, 'Paper Analysis');
+
+                // 6. Best 15
                 const best15Data = bestFifteen.map((c,i) => ({
                     Rank: i+1,
                     IndexNo: c.index,
                     Name: c.name,
                     Sex: c.sex,
+                    Combination: c.combination,
+                    Grade: c.gradeString,
                     TotalPoints: c.points,
                     PrinciplePasses: c.principlePasses
                 }));
                 ws = XLSX.utils.json_to_sheet(best15Data);
                 XLSX.utils.book_append_sheet(wb, ws, 'Best 15');
 
-                // 6. All candidates
+                // 7. All candidates with subject details
                 const allCandsData = candidatePoints.map(c => ({
                     IndexNo: c.index,
                     Name: c.name,
                     Sex: c.sex,
+                    Combination: c.combination,
+                    Grade: c.gradeString,
                     TotalPoints: c.points,
-                    PrinciplePasses: c.principlePasses
+                    PrinciplePasses: c.principlePasses,
+                    Subjects: c.subjects.map(s => `${s.code}(${s.grade})`).join(', ')
                 }));
                 ws = XLSX.utils.json_to_sheet(allCandsData);
                 XLSX.utils.book_append_sheet(wb, ws, 'All Candidates');
 
-                XLSX.writeFile(wb, 'UACE_Full_Report.xlsx');
+                XLSX.writeFile(wb, 'UACE_Master_Report.xlsx');
             };
 
             // ---------- EXPORT PDF ----------
@@ -638,18 +785,17 @@
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF('landscape', 'mm', 'a4');
                 const reportElement = document.getElementById('reportArea');
-                // Clone to avoid modifying original
                 const clone = reportElement.cloneNode(true);
                 clone.style.background = 'white';
                 clone.style.padding = '15px';
-                clone.style.width = '1100px'; // enforce width for consistent capture
+                clone.style.width = '1100px';
                 const container = document.createElement('div');
                 container.appendChild(clone);
                 document.body.appendChild(container);
                 try {
                     const canvas = await html2canvas(container, { scale: 1.5, backgroundColor: '#ffffff', logging: false });
                     const imgData = canvas.toDataURL('image/png');
-                    const imgWidth = 280; // A4 landscape width in mm
+                    const imgWidth = 280;
                     const pageHeight = 210;
                     const imgHeight = (canvas.height * imgWidth) / canvas.width;
                     let heightLeft = imgHeight;
@@ -662,7 +808,7 @@
                         doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
                         heightLeft -= pageHeight;
                     }
-                    doc.save('UACE_Full_Report.pdf');
+                    doc.save('UACE_Master_Report.pdf');
                 } finally {
                     document.body.removeChild(container);
                 }
