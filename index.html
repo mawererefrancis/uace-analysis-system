@@ -107,9 +107,9 @@
         }
         .best-table th, .points-table th { background: #063b49; color: white; padding: 12px 8px; font-weight: 600; }
         .best-table td, .points-table td { padding: 10px 8px; border-bottom: 1px solid #cbdbe9; text-align: left; }
-        .best-table td:nth-child(5), .points-table td:nth-child(4) { text-align: center; } /* points column */
-        .best-table td:nth-child(6) { text-align: center; } /* principle passes column */
-        .points-table td:nth-child(4) { text-align: center; }
+        .best-table td:nth-child(6), .points-table td:nth-child(6) { text-align: center; } /* points column */
+        .best-table td:nth-child(7) { text-align: center; } /* principle passes column */
+        .points-table td:nth-child(7) { text-align: left; font-size: 0.8rem; }
         .best-table tr:nth-child(even), .points-table tr:nth-child(even) { background: #f3f9ff; }
         .badge {
             background: #0d6f88; color: white; border-radius: 40px; padding: 4px 12px; font-weight: 500;
@@ -339,7 +339,7 @@
                             }
 
                             let totalPoints = 0;
-                            let principlePasses = 0; // count of A-E in principle subjects (now includes O for pass? we'll change later)
+                            let principlePasses = 0; // count of A-O in principle subjects
                             const subjectDetails = []; // store { code, grade, isSubsidiary, paperGrades }
 
                             combinedTokens.forEach(token => {
@@ -416,7 +416,8 @@
                             });
                             // ensure we have 3 principals (if not, pad with empty)
                             while (principals.length < 3) principals.push({ code: '???', grade: '?' });
-                            const combination = principals.map(p => p.code.charAt(0)).join('');
+                            // Build combination: for each principal, if code is "CRE" use 'D', else first letter
+                            const combination = principals.map(p => p.code === 'CRE' ? 'D' : p.code.charAt(0)).join('');
                             const gradeString = (gepGrade !== null ? gepGrade : '?') +
                                                 principals.map(p => p.grade).join('') +
                                                 (subsidiaryGrade !== null ? subsidiaryGrade : '?');
@@ -613,11 +614,11 @@
 
                     <h2 class="section-title">🏅 BEST 15 CANDIDATES</h2>
                     <table class="best-table">
-                        <thead><tr><th>Rank</th><th>Index No</th><th>Name</th><th>Sex</th><th>Total Points</th><th>Principle Passes</th></tr></thead>
+                        <thead><tr><th>Rank</th><th>Index No</th><th>Name</th><th>Sex</th><th>Combination</th><th>Grade</th><th>Total Points</th><th>Principle Passes</th></tr></thead>
                         <tbody>
                 `;
                 bestFifteen.forEach((c, i) => {
-                    html += `<tr><td>${i+1}</td><td>${c.index}</td><td style="text-align:left;">${c.name}</td><td>${c.sex}</td><td>${c.points}</td><td>${c.principlePasses}</td></tr>`;
+                    html += `<tr><td>${i+1}</td><td>${c.index}</td><td style="text-align:left;">${c.name}</td><td>${c.sex}</td><td>${c.combination}</td><td>${c.gradeString}</td><td>${c.points}</td><td>${c.principlePasses}</td></tr>`;
                 });
                 html += `</tbody></table>`;
 
