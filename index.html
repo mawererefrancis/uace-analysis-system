@@ -200,6 +200,100 @@
             // subsidiary codes
             const subsidiaryCodes = new Set(['GEP', 'CST', 'SMA']);
 
+            // ---------- COMBINATION MAPPING ----------
+            // Maps a sorted triple of subject codes (normalized) to the official combination code.
+            const combinationMap = {
+                // MTC CHE BIO -> BCM
+                "BIO-CHE-MTC": "BCM",
+                // CHE BIO PHY -> PCB
+                "BIO-CHE-PHY": "PCB",
+                // PHY MTC ECO -> PEM
+                "ECO-MTC-PHY": "PEM",
+                // PHY ENT MTC -> PEM (same)
+                "ENT-MTC-PHY": "PEM",
+                // PHY CHE MTC -> PCM
+                "CHE-MTC-PHY": "PCM",
+                // PHY MTC ART -> PAM
+                "ART-MTC-PHY": "PAM",
+                // BIO AGR GEO -> BAG
+                "AGR-BIO-GEO": "BAG",
+                // MTC ENT GEO -> MEG
+                "ENT-GEO-MTC": "MEG",
+                // BIO CHE AGR -> BCA
+                "AGR-BIO-CHE": "BCA",
+                // HIS ENT GEO -> HEG
+                "ENT-GEO-HIS": "HEG",
+                // HIS ECO GEO -> HEG
+                "ECO-GEO-HIS": "HEG",
+                // HIS CRE ENT -> HED
+                "CRE-ENT-HIS": "HED",
+                // HIS CRE ECO -> HED
+                "CRE-ECO-HIS": "HED",
+                // MTC ART GEO -> MAG
+                "ART-GEO-MTC": "MAG",
+                // MTC AGR GEO -> MAG
+                "AGR-GEO-MTC": "MAG",
+                // HIS CRE GEO -> HDG
+                "CRE-GEO-HIS": "HDG",
+                // HIS ENT LIT -> HEL
+                "ENT-HIS-LIT": "HEL",
+                // LIT ENT GEO -> LEG
+                "ENT-GEO-LIT": "LEG",
+                // LIT ECON GEO -> LEG (ECON normalized to ECO)
+                "ECO-GEO-LIT": "LEG",
+                // HIS LIT CRE -> HLD
+                "CRE-HIS-LIT": "HLD",
+                // HIS ART CRE -> HAD
+                "ART-CRE-HIS": "HAD",
+                // HIS DHP ENT -> HED
+                "DHP-ENT-HIS": "HED",
+                // HIS DHP ECO -> HED
+                "DHP-ECO-HIS": "HED",
+                // CRE ART GEO -> DAG
+                "ART-CRE-GEO": "DAG",
+                // DHP ART GEO -> DAG
+                "ART-DHP-GEO": "DAG",
+                // HIS ART DHP -> HAD
+                "ART-DHP-HIS": "HAD",
+                // CRE ENT GEO -> DEG
+                "CRE-ENT-GEO": "DEG",
+                // DHP ENT GEO -> DEG
+                "DHP-ENT-GEO": "DEG",
+                // CRE ECO GEO -> DEG
+                "CRE-ECO-GEO": "DEG",
+
+                // NEW MAPPINGS (as per user request)
+                // ENT GEO ART -> GEA
+                "ART-ENT-GEO": "GEA",
+                // ECON GEO ART -> GEA (ECON -> ECO)
+                "ART-ECO-GEO": "GEA",
+                // ENT GEO AGR -> GEA
+                "AGR-ENT-GEO": "GEA",
+                // ENT MTC AGR -> MEA
+                "AGR-ENT-MTC": "MEA",
+                // ECON GEO MTC -> MEA
+                "ECO-GEO-MTC": "MEA",
+                // ENT DHP ART -> DEA
+                "ART-DHP-ENT": "DEA",
+                // ENT CRE ART -> DEA
+                "ART-CRE-ENT": "DEA",
+                // ENT CRE DHP -> DED
+                "CRE-DHP-ENT": "DED"
+            };
+
+            // Normalize subject code for combination lookup (e.g., ECON -> ECO, PA -> ART)
+            function normalizeForCombination(code) {
+                if (code === 'ECON') return 'ECO';
+                if (code === 'PA') return 'ART';   // Performing Arts code is PA, but combination uses ART
+                return code;
+            }
+
+            // Fallback: map a single subject code to a letter (CRE and DHP become 'D', otherwise first letter)
+            function codeToLetter(code) {
+                if (code === 'CRE' || code === 'DHP') return 'D';
+                return code.charAt(0);
+            }
+
             // global data stores
             let gradeSummary = { A:0, B:0, C:0, D:0, E:0, O:0, F:0 };
             // principle subjects (excluding subsidiaries): { fullName: { A, B, C, D, E, O, F, total, pass } }
@@ -339,7 +433,7 @@
                             }
 
                             let totalPoints = 0;
-                            let principlePasses = 0; // count of A-O in principle subjects
+                            let principlePasses = 0; // count of A-E in principle subjects (O is NOT a pass)
                             const subjectDetails = []; // store { code, grade, isSubsidiary, paperGrades }
 
                             combinedTokens.forEach(token => {
@@ -380,8 +474,8 @@
                                     }
                                     principleSubjectStats[fullName][gradeLetter] += 1;
                                     principleSubjectStats[fullName].total += 1;
-                                    // Pass definition now includes O (A through O)
-                                    if (['A','B','C','D','E','O'].includes(gradeLetter)) {
+                                    // Pass definition: A through E only (O is NOT a pass)
+                                    if (['A','B','C','D','E'].includes(gradeLetter)) {
                                         principleSubjectStats[fullName].pass += 1;
                                     }
                                 }
@@ -393,8 +487,8 @@
                                 const points = gradePoints[gradeLetter] || 0;
                                 totalPoints += points;
 
-                                // Count principle passes (A through O) for principle subjects only
-                                if (!isSubsidiary && ['A','B','C','D','E','O'].includes(gradeLetter)) {
+                                // Count principle passes (A through E) for principle subjects only
+                                if (!isSubsidiary && ['A','B','C','D','E'].includes(gradeLetter)) {
                                     principlePasses += 1;
                                 }
 
@@ -416,8 +510,18 @@
                             });
                             // ensure we have 3 principals (if not, pad with empty)
                             while (principals.length < 3) principals.push({ code: '???', grade: '?' });
-                            // Build combination: for each principal, if code is "CRE" use 'D', else first letter
-                            const combination = principals.map(p => p.code === 'CRE' ? 'D' : p.code.charAt(0)).join('');
+
+                            // ----- COMBINATION LOGIC (with lookup) -----
+                            // Normalize codes for lookup
+                            const principalCodes = principals.map(p => normalizeForCombination(p.code));
+                            // Sort to form lookup key
+                            const sortedKey = principalCodes.slice().sort().join('-');
+                            let combinationBase = combinationMap[sortedKey];
+                            if (!combinationBase) {
+                                // Fallback: use original order letters (CRE/DHP -> D)
+                                combinationBase = principals.map(p => codeToLetter(p.code)).join('');
+                            }
+                            const combination = combinationBase + (subsidiaryCode ? '/' + (subsidiaryCode === 'CST' ? 'ICT' : 'S-MTC') : '');
                             const gradeString = (gepGrade !== null ? gepGrade : '?') +
                                                 principals.map(p => p.grade).join('') +
                                                 (subsidiaryGrade !== null ? subsidiaryGrade : '?');
@@ -428,12 +532,12 @@
                                 sex: sex,
                                 points: totalPoints,
                                 principlePasses: principlePasses,
-                                combination: combination + (subsidiaryCode ? '/' + (subsidiaryCode === 'CST' ? 'ICT' : 'S-MTC') : ''),
+                                combination: combination,
                                 gradeString: gradeString,
                                 subjects: subjectDetails // for detailed view
                             });
 
-                            // Update principle pass counts (now including O)
+                            // Update principle pass counts (now A-E only)
                             if (principlePasses >= 3) principlePassCounts['3'] += 1;
                             else if (principlePasses === 2) principlePassCounts['2'] += 1;
                             else if (principlePasses === 1) principlePassCounts['1'] += 1;
@@ -475,13 +579,13 @@
             // ---------- RENDER REPORT ----------
             function renderReport() {
                 const totalCandidates = candidatePoints.length;
-                // overall pass based on at least 2 principle passes (A-O)
+                // overall pass based on at least 2 principle passes (A-E)
                 const overallPassed = candidatePoints.filter(c => c.principlePasses >= 2).length;
                 const passPercent = totalCandidates ? ((overallPassed / totalCandidates) * 100).toFixed(1) : 0;
                 const bestMale = candidatePoints.find(c => c.sex === 'M') || null;
                 const bestFemale = candidatePoints.find(c => c.sex === 'F') || null;
 
-                // Principle subjects (ranked by pass % where pass includes O)
+                // Principle subjects (ranked by pass % where pass is A-E only)
                 const principleEntries = Object.entries(principleSubjectStats).map(([name, stats]) => {
                     const passPercent = stats.total ? ((stats.pass / stats.total) * 100).toFixed(1) : 0;
                     return { name, ...stats, passPercent };
@@ -559,13 +663,13 @@
                 let html = `
                     <div class="info-cards">
                         <div class="card"><h3>📋 Candidates Sat</h3><div class="big-number">${totalCandidates}</div></div>
-                        <div class="card"><h3>✅ Pass (≥2 prin.)</h3><div class="big-number">${passPercent}%</div></div>
+                        <div class="card"><h3>✅ Pass (≥2 prin. A-E)</h3><div class="big-number">${passPercent}%</div></div>
                         <div class="card"><h3>🏆 Top Points</h3><div class="big-number">${candidatePoints[0]?.points || 0}</div></div>
                     </div>
 
-                    <!-- Principle Subjects (A-O = Pass) -->
+                    <!-- Principle Subjects (A-E = Pass) -->
                     <div class="summary-table">
-                        <h3>📚 PRINCIPLE SUBJECTS (A-O = Pass) - Ranked by %Pass</h3>
+                        <h3>📚 PRINCIPLE SUBJECTS (A-E = Pass) - Ranked by %Pass</h3>
                         <table>
                             <thead><tr><th>Subject</th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>O</th><th>F</th><th>Sat</th><th>%Pass</th></tr></thead>
                             <tbody>${principleRows}</tbody>
@@ -583,7 +687,7 @@
 
                     <!-- Principles Obtained Table -->
                     <div class="summary-table">
-                        <h3>🎓 NUMBER OF PRINCIPLE PASSES PER CANDIDATE</h3>
+                        <h3>🎓 NUMBER OF PRINCIPLE PASSES PER CANDIDATE (A-E only)</h3>
                         <table>
                             <thead><tr><th>Principle Passes</th><th>Number of Candidates</th></tr></thead>
                             <tbody>${principlesRows}</tbody>
@@ -592,7 +696,7 @@
 
                     <!-- Gender × Principle Passes -->
                     <div class="summary-table">
-                        <h3>⚥ GENDER WISE PRINCIPLE PASSES</h3>
+                        <h3>⚥ GENDER WISE PRINCIPLE PASSES (A-E only)</h3>
                         <table>
                             ${genderRows}
                         </table>
@@ -608,13 +712,13 @@
                     </div>
 
                     <div style="display:flex; gap:40px; flex-wrap:wrap; margin:20px 0;">
-                        ${bestMale ? `<div class="card"><h3>👤 Best Male</h3>${bestMale.name}<br>Index: ${bestMale.index}<br><span class="badge">${bestMale.points} pts</span><br>Principle passes: ${bestMale.principlePasses}</div>` : ''}
-                        ${bestFemale ? `<div class="card"><h3>👩 Best Female</h3>${bestFemale.name}<br>Index: ${bestFemale.index}<br><span class="badge">${bestFemale.points} pts</span><br>Principle passes: ${bestFemale.principlePasses}</div>` : ''}
+                        ${bestMale ? `<div class="card"><h3>👤 Best Male</h3>${bestMale.name}<br>Index: ${bestMale.index}<br><span class="badge">${bestMale.points} pts</span><br>Principle passes (A-E): ${bestMale.principlePasses}</div>` : ''}
+                        ${bestFemale ? `<div class="card"><h3>👩 Best Female</h3>${bestFemale.name}<br>Index: ${bestFemale.index}<br><span class="badge">${bestFemale.points} pts</span><br>Principle passes (A-E): ${bestFemale.principlePasses}</div>` : ''}
                     </div>
 
                     <h2 class="section-title">🏅 BEST 15 CANDIDATES</h2>
                     <table class="best-table">
-                        <thead><tr><th>Rank</th><th>Index No</th><th>Name</th><th>Sex</th><th>Combination</th><th>Grade</th><th>Total Points</th><th>Principle Passes</th></tr></thead>
+                        <thead><tr><th>Rank</th><th>Index No</th><th>Name</th><th>Sex</th><th>Combination</th><th>Grade</th><th>Total Points</th><th>Principle Passes (A-E)</th></tr></thead>
                         <tbody>
                 `;
                 bestFifteen.forEach((c, i) => {
@@ -714,7 +818,7 @@
                 XLSX.utils.book_append_sheet(wb, ws, 'Subsidiary Subjects');
 
                 // 3. Principles obtained
-                const principlesData = [['Principle Passes','Number of Candidates']];
+                const principlesData = [['Principle Passes (A-E)','Number of Candidates']];
                 principlesData.push(['3', principlePassCounts['3']]);
                 principlesData.push(['2', principlePassCounts['2']]);
                 principlesData.push(['1', principlePassCounts['1']]);
@@ -724,7 +828,7 @@
 
                 // 4. Gender × principles
                 const genderData = [
-                    ['Gender','3 passes','2 passes','1 pass','0 passes'],
+                    ['Gender','3 passes (A-E)','2 passes','1 pass','0 passes'],
                     ['Male', genderPrinciple.M['3'], genderPrinciple.M['2'], genderPrinciple.M['1'], genderPrinciple.M['0']],
                     ['Female', genderPrinciple.F['3'], genderPrinciple.F['2'], genderPrinciple.F['1'], genderPrinciple.F['0']]
                 ];
